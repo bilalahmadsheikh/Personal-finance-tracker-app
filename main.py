@@ -6,7 +6,7 @@ import logging
 import os
 from flask_cors import CORS
 from datetime import datetime, timedelta
-
+from configparser import ConfigParser
 
 app = Flask(__name__)
 CORS(app)
@@ -16,15 +16,26 @@ app.config['SECRET_KEY'] = 'your_secret_key'
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-# Database credentials
-DB_USER = "postgres.wycjzewgzlupwqjlxnzr"
-DB_PASSWORD = "Cricket66666t"
-DB_HOST = "aws-0-ap-south-1.pooler.supabase.com"
-DB_PORT = "5432"
-DB_NAME = "postgres"
+# Load DB config from database.ini
+def load_db_config(filename='database.ini', section='postgresql'):
+    parser = ConfigParser()
+    parser.read(filename)
+
+    if not parser.has_section(section):
+        raise Exception(f'Section {section} not found in {filename}')
+    
+    return {param[0]: param[1] for param in parser.items(section)}
+
+config = load_db_config()
+DB_USER = config['user']
+DB_PASSWORD = config['password']
+DB_HOST = config['host']
+DB_PORT = config['port']
+DB_NAME = config['database']
 
 DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 os.environ["PSYCOPG2_FORCE_IPV4"] = "1"
+
 
 def get_db_connection():
     try:
