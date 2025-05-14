@@ -8,13 +8,13 @@ from flask_cors import CORS
 from datetime import datetime, timedelta
 from configparser import ConfigParser
 
-app = Flask(__name__)
+app = Flask(_name_)
 CORS(app)
 app.config['SECRET_KEY'] = 'your_secret_key'
 
 # Logging setup
 logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(_name_)
 
 # Load DB config from database.ini
 def load_db_config(filename='database.ini', section='postgresql'):
@@ -141,7 +141,7 @@ def get_transactions(user_id):
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute("""
-            SELECT category, amount, transaction_type AS type, description, created_at AS date
+            SELECT transaction_id, category, amount, transaction_type AS type, description, created_at AS date
             FROM transactions
             WHERE user_id = %s
             ORDER BY created_at DESC
@@ -149,10 +149,161 @@ def get_transactions(user_id):
         transactions = cur.fetchall()
         cur.close()
         conn.close()
+
+        # Log the fetched transactions to verify the data
+        logger.debug(f"Fetched transactions: {transactions}")
+
         return jsonify(transactions), 200
     except Exception as e:
         logger.error(f"Fetch transactions error: {e}")
         return jsonify({"message": f"Error fetching transactions: {e}"}), 500
+
+@app.route('/update-transaction', methods=['POST'])
+def update_transaction():
+    data = request.get_json()
+    transaction_id = data.get('transaction_id')
+    category = data.get('category')
+    amount = data.get('amount')
+    transaction_type = data.get('transaction_type')
+    description = data.get('description')
+    user_id = data.get('user_id')  # User ID should be passed along with the transaction
+
+    # Ensure all required fields are provided
+    if not all([transaction_id, category, amount, transaction_type]):
+        return jsonify({"message": "All transaction details are required"}), 400
+
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        # Update the transaction
+        cur.execute("""
+            UPDATE transactions
+            SET category = %s, amount = %s, transaction_type = %s, description = %s
+            WHERE transaction_id = %s AND user_id = %s
+        """, (category, amount, transaction_type, description, transaction_id, user_id))
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        return jsonify({"message": "Transaction updated successfully"}), 200
+    except Exception as e:
+        logger.error(f"Update transaction error: {e}")
+        return jsonify({"message": "Error updating transaction"}), 500
+
+@app.route('/delete-transaction', methods=['POST'])
+def delete_transaction():
+    data = request.get_json()
+    transaction_id = data.get('transaction_id')
+
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        # Fetch the original transaction
+        cur.execute("SELECT * FROM transactions WHERE transaction_id = %s", (transaction_id,))
+        transaction = cur.fetchone()
+        if not transaction:
+            return jsonify({"message": "Transaction not found"}), 404
+
+        # Insert into backup table and return backup_id
+        cur.execute("""
+            INSERT INTO transactions_backup (
+                original_transaction_id, user_id, category, amount, date,
+                is_recurring, transaction_type, description, created_at, deleted_at
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+            RETURNING backup_id
+        """, (
+            transaction['transaction_id'],
+            transaction['user_id'],
+            transaction['category'],
+            transaction['amount'],
+            transaction.get('date') or transaction['created_at'],
+            transaction.get('is_recurring') or False,
+            transaction['transaction_type'],
+            transaction.get('description', ''),
+            transaction['created_at'],
+        ))
+
+        backup_id = cur.fetchone()['backup_id']
+
+        # Delete the original transaction
+        cur.execute("DELETE FROM transactions WHERE transaction_id = %s", (transaction_id,))
+
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        return jsonify({"message": "Transaction deleted and backed up", "backup_id": backup_id}), 200
+    except Exception as e:
+        logger.error(f"Delete transaction error: {e}")
+        return jsonify({"message": "Failed to delete transaction"}), 500
+
+@app.route('/get-deleted-transactions/<user_id>', methods=['GET'])
+def get_deleted_transactions(user_id):
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT backup_id, category, amount, transaction_type, description, deleted_at
+            FROM transactions_backup
+            WHERE user_id = %s
+            ORDER BY deleted_at DESC
+        """, (user_id,))
+        data = cur.fetchall()
+        cur.close()
+        conn.close()
+        return jsonify(data), 200
+    except Exception as e:
+        logger.error(f"Error fetching deleted transactions: {e}")
+        return jsonify({"message": "Error loading deleted transactions"}), 500
+
+
+    
+@app.route('/restore-transaction', methods=['POST'])
+def restore_transaction():
+    data = request.get_json()
+    backup_id = data.get('backup_id')
+
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        # ✅ FIXED: Use backup_id, NOT transaction_id
+        cur.execute("SELECT * FROM transactions_backup WHERE backup_id = %s", (backup_id,))
+        backup = cur.fetchone()
+        if not backup:
+            return jsonify({"message": "Backup transaction not found"}), 404
+
+        # ✅ Restore the transaction
+        cur.execute("""
+            INSERT INTO transactions (
+                user_id, category, amount, transaction_type,
+                description, is_recurring, created_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """, (
+            backup['user_id'],
+            backup['category'],
+            backup['amount'],
+            backup['transaction_type'],
+            backup['description'],
+            backup['is_recurring'],
+            backup['created_at']
+        ))
+
+        # ✅ Delete from backup table by backup_id
+        cur.execute("DELETE FROM transactions_backup WHERE backup_id = %s", (backup_id,))
+
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        return jsonify({"message": "Transaction restored"}), 200
+
+    except Exception as e:
+        logger.error(f"Restore transaction error: {e}")
+        return jsonify({"message": "Failed to restore transaction"}), 500
 
 @app.route('/set-budget/<user_id>', methods=['POST'])
 def set_budget(user_id):
@@ -287,6 +438,9 @@ def get_dashboard(user_id):
     except Exception as e:
         logger.error(f"Dashboard error: {e}")
         return jsonify({"message": "Error fetching dashboard data"}), 500
+
+
+
     
 @app.route('/get-report/<user_id>', methods=['GET'])
 def get_report(user_id):
@@ -530,7 +684,7 @@ def test_db_connection():
     except Exception as e:
         return jsonify({"error": f"Database connection failed: {e}"}), 500
 
-if __name__ == '__main__':
+if _name_ == '_main_':
     
     test_db_connection_on_startup()
     app.run(debug=True, host='0.0.0.0', port=5000)
