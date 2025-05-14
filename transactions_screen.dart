@@ -253,6 +253,51 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     }
   }
 
+  // Show Deleted Transactions
+  void _showDeletedTransactionsDialog() async {
+    final backups = await ApiService.getDeletedTransactions(widget.userId);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Deleted Transactions"),
+        content: backups.isEmpty
+            ? const Text("No deleted transactions.")
+            : SizedBox(
+                width: double.maxFinite,
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: backups.length,
+                  itemBuilder: (context, index) {
+                    final tx = backups[index];
+                    return ListTile(
+                      title: Text(tx['category']),
+                      subtitle: Text("Rs${tx['amount']} — ${tx['transaction_type']}"),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.undo, color: Colors.green),
+                        onPressed: () async {
+                          final restore = await ApiService.restoreTransaction(tx['backup_id']);
+                          Navigator.of(context).pop();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(restore['message'] ?? 'Restored')),
+                          );
+                          _fetchTransactions();
+                        },
+                      ),
+                    );
+                  },
+                ),
+              ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Close"),
+          ),
+        ],
+      ),
+    );
+  }
+
   // Build Transaction Tile
   Widget _buildTransactionTile(Map<String, dynamic> transaction) {
     final isIncome = transaction['type'] == 'income';
@@ -279,11 +324,48 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
       title: Text(transaction['category']),
       subtitle: Text("${transaction['description'] ?? ''}\n$formattedDate"),
       isThreeLine: true,
-      trailing: Text(
-        'Rs${amount.toStringAsFixed(2)}',
-        style: TextStyle(
-          color: isIncome ? Colors.green : Colors.red,
-          fontWeight: FontWeight.bold,
+      trailing: SizedBox(
+        width: 120, // Give enough space for the delete button
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            Text(
+              'Rs${amount.toStringAsFixed(2)}',
+              style: TextStyle(
+                color: isIncome ? Colors.green : Colors.red,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete, color: Colors.red),
+              tooltip: "Delete",
+              onPressed: () async {
+                final response = await ApiService.deleteTransaction(transaction['transaction_id']);
+                final backupId = response['backup_id'];
+                final message = response['message'];
+
+                if (!mounted) return;
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(message ?? 'Deleted'),
+                    action: SnackBarAction(
+                      label: 'Undo',
+                      onPressed: () async {
+                        final undo = await ApiService.restoreTransaction(backupId);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(undo['message'] ?? 'Restored')),
+                        );
+                        _fetchTransactions();
+                      },
+                    ),
+                  ),
+                );
+
+                _fetchTransactions();
+              },
+            ),
+          ],
         ),
       ),
       onTap: () => _updateTransaction(_transactions.indexOf(transaction)),
@@ -303,20 +385,27 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
               child: const Text("Add Transaction"),
             ),
             const SizedBox(height: 20),
+            // Button to show deleted transactions
+            ElevatedButton.icon(
+              onPressed: _showDeletedTransactionsDialog,
+              icon: const Icon(Icons.delete_outline),
+              label: const Text("Deleted Transactions"),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[700]),
+            ),
+            const SizedBox(height: 20),
             Expanded(
-              child:
-                  _isLoading
-                      ? const Center(child: CircularProgressIndicator())
-                      : _error != null
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _error != null
                       ? Center(child: Text(_error!))
                       : _transactions.isEmpty
                       ? const Center(child: Text("No transactions yet."))
                       : ListView.builder(
-                        itemCount: _transactions.length,
-                        itemBuilder: (context, index) {
-                          return _buildTransactionTile(_transactions[index]);
-                        },
-                      ),
+                          itemCount: _transactions.length,
+                          itemBuilder: (context, index) {
+                            return _buildTransactionTile(_transactions[index]);
+                          },
+                        ),
             ),
           ],
         ),
