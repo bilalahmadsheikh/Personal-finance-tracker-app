@@ -26,6 +26,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     _fetchTransactions();
   }
 
+  // Fetch Transactions
   Future<void> _fetchTransactions() async {
     setState(() {
       _isLoading = true;
@@ -47,6 +48,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     }
   }
 
+  // Add Transaction
   Future<void> _addTransaction() async {
     final category = _categoryController.text.trim();
     final amount = double.tryParse(_amountController.text);
@@ -94,19 +96,180 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     }
   }
 
+  // Open Add Transaction Dialog
+  Future<void> _openAddTransactionDialog() async {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Add Transaction"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _categoryController,
+                decoration: const InputDecoration(labelText: "Category"),
+              ),
+              TextField(
+                controller: _amountController,
+                decoration: const InputDecoration(labelText: "Amount"),
+                keyboardType: TextInputType.number,
+              ),
+              TextField(
+                controller: _descriptionController,
+                decoration: const InputDecoration(labelText: "Description"),
+              ),
+              DropdownButton<String>(
+                value: _transactionType,
+                onChanged: (String? newValue) {
+                  setState(() {
+                    _transactionType = newValue!;
+                  });
+                },
+                items: const [
+                  DropdownMenuItem(value: 'income', child: Text("Income")),
+                  DropdownMenuItem(value: 'expense', child: Text("Expense")),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel"),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                _addTransaction();
+                Navigator.pop(context); // Close dialog after adding transaction
+              },
+              child: const Text("Add"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Update Transaction
+  Future<void> _updateTransaction(int index) async {
+    final transaction = _transactions[index];
+
+    // Ensure transaction_id is not null
+    if (transaction['transaction_id'] == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Transaction ID is missing. Cannot update.")),
+      );
+      return;
+    }
+
+    print('Transaction ID for update: ${transaction['transaction_id']}');  // Debugging step
+
+    // Populate the fields with the transaction data
+    _categoryController.text = transaction['category'];
+    _amountController.text = transaction['amount'].toString();
+    _descriptionController.text = transaction['description'] ?? '';
+    _transactionType = transaction['type'];  // Correct variable name
+
+    // Show dialog for updating transaction
+    final updatedTransaction = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Update Transaction"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _categoryController,
+                decoration: const InputDecoration(labelText: "Category"),
+              ),
+              TextField(
+                controller: _amountController,
+                decoration: const InputDecoration(labelText: "Amount"),
+                keyboardType: TextInputType.number,
+              ),
+              TextField(
+                controller: _descriptionController,
+                decoration: const InputDecoration(labelText: "Description"),
+              ),
+              DropdownButton<String>(
+                value: _transactionType,
+                onChanged: (String? newValue) {
+                  setState(() {
+                    _transactionType = newValue!;
+                  });
+                },
+                items: const [
+                  DropdownMenuItem(value: 'income', child: Text("Income")),
+                  DropdownMenuItem(value: 'expense', child: Text("Expense")),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel"),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final category = _categoryController.text.trim();
+                final amount = double.tryParse(_amountController.text);
+                final description = _descriptionController.text.trim();
+                if (category.isEmpty || amount == null) return;
+
+                // Return the updated data
+                Navigator.pop(context, {
+                  'transaction_id': transaction['transaction_id'], // Ensure it's not null
+                  'category': category,
+                  'amount': amount,
+                  'transaction_type': _transactionType,  // Correct variable name
+                  'description': description,
+                });
+              },
+              child: const Text("Update"),
+            ),
+          ],
+        );
+      },
+    );
+
+    // Handle the response after updating
+    if (updatedTransaction != null) {
+      final response = await ApiService.updateTransaction(
+        widget.userId,
+        updatedTransaction['transaction_id'],  // Ensure 'transaction_id' is correct
+        updatedTransaction['category'],
+        updatedTransaction['amount'],
+        updatedTransaction['transaction_type'],  // Correct variable name
+        updatedTransaction['description'],
+      );
+      if (response['message'] == 'Transaction updated successfully') {
+        setState(() {
+          _transactions[index] = updatedTransaction;
+        });
+      }
+    }
+  }
+
+  // Build Transaction Tile
   Widget _buildTransactionTile(Map<String, dynamic> transaction) {
     final isIncome = transaction['type'] == 'income';
-    final double amount = double.tryParse(transaction['amount'].toString()) ?? 0.0;
+    final double amount =
+        double.tryParse(transaction['amount'].toString()) ?? 0.0;
 
     String formattedDate = "Unknown date";
-try {
-  final rawDate = transaction['date'].toString();
-  final parsedDate = DateFormat("EEE, dd MMM yyyy HH:mm:ss 'GMT'").parseUtc(rawDate).toLocal();
-  formattedDate = DateFormat('yyyy-MM-dd').format(parsedDate);
-} catch (e) {
-  debugPrint("❌ Date parsing failed for ${transaction['date']}: $e");
-}
-
+    try {
+      final rawDate = transaction['date'].toString();
+      final parsedDate =
+          DateFormat(
+            "EEE, dd MMM yyyy HH:mm:ss 'GMT'",
+          ).parseUtc(rawDate).toLocal();
+      formattedDate = DateFormat('yyyy-MM-dd').format(parsedDate);
+    } catch (e) {
+      debugPrint("❌ Date parsing failed for ${transaction['date']}: $e");
+    }
 
     return ListTile(
       leading: Icon(
@@ -123,6 +286,7 @@ try {
           fontWeight: FontWeight.bold,
         ),
       ),
+      onTap: () => _updateTransaction(_transactions.indexOf(transaction)),
     );
   }
 
@@ -134,54 +298,25 @@ try {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            TextField(
-              controller: _categoryController,
-              decoration: const InputDecoration(labelText: "Category"),
-            ),
-            TextField(
-              controller: _amountController,
-              decoration: const InputDecoration(labelText: "Amount"),
-              keyboardType: TextInputType.number,
-            ),
-            TextField(
-              controller: _descriptionController,
-              decoration: const InputDecoration(labelText: "Description"),
-            ),
-            Row(
-              children: [
-                const Text("Type: "),
-                DropdownButton<String>(
-                  value: _transactionType,
-                  onChanged: (String? newValue) {
-                    setState(() {
-                      _transactionType = newValue!;
-                    });
-                  },
-                  items: const [
-                    DropdownMenuItem(value: 'income', child: Text("Income")),
-                    DropdownMenuItem(value: 'expense', child: Text("Expense")),
-                  ],
-                ),
-              ],
-            ),
             ElevatedButton(
-              onPressed: _addTransaction,
+              onPressed: _openAddTransactionDialog,
               child: const Text("Add Transaction"),
             ),
             const SizedBox(height: 20),
             Expanded(
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _error != null
+              child:
+                  _isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : _error != null
                       ? Center(child: Text(_error!))
                       : _transactions.isEmpty
-                          ? const Center(child: Text("No transactions yet."))
-                          : ListView.builder(
-                              itemCount: _transactions.length,
-                              itemBuilder: (context, index) {
-                                return _buildTransactionTile(_transactions[index]);
-                              },
-                            ),
+                      ? const Center(child: Text("No transactions yet."))
+                      : ListView.builder(
+                        itemCount: _transactions.length,
+                        itemBuilder: (context, index) {
+                          return _buildTransactionTile(_transactions[index]);
+                        },
+                      ),
             ),
           ],
         ),
