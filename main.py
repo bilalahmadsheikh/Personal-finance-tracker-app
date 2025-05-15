@@ -8,13 +8,13 @@ from flask_cors import CORS
 from datetime import datetime, timedelta
 from configparser import ConfigParser
 
-app = Flask(_name_)
+app = Flask(__name__)
 CORS(app)
 app.config['SECRET_KEY'] = 'your_secret_key'
 
 # Logging setup
 logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(_name_)
+logger = logging.getLogger(__name__)
 
 # Load DB config from database.ini
 def load_db_config(filename='database.ini', section='postgresql'):
@@ -388,6 +388,42 @@ def get_budgets(user_id):
         return jsonify({"message": "Error fetching budgets"}), 500
 
 
+@app.route('/get-transaction-logs/<int:user_id>', methods=['GET'])
+def get_transaction_logs(user_id):
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)  # Use RealDictCursor here
+        
+        # Call your function fetch_transaction_logs
+        cur.execute("SELECT * FROM fetch_transaction_logs(%s);", (user_id,))
+        logs = cur.fetchall()
+        
+        cur.close()
+        conn.close()
+        
+        # Now row is a dict, so access by key
+        result = []
+        for row in logs:
+            result.append({
+                "log_id": row['log_id'],
+                "transaction_id": row['transaction_id'],
+                "category": row['category'],
+                "amount": float(row['amount']) if row['amount'] is not None else 0,
+                "action": row['action'],
+                "timestamp": row['log_timestamp'].isoformat() if row['log_timestamp'] else None,
+            })
+        
+        return jsonify(result), 200
+    
+    except Exception as e:
+        import traceback
+        logger.error(f"Error fetching transaction logs: {e}\n{traceback.format_exc()}")
+        return jsonify({"message": f"Error fetching transaction logs: {str(e)}"}), 500
+
+
+
+
+
 
 
 @app.route('/get-dashboard/<user_id>', methods=['GET'])
@@ -684,7 +720,7 @@ def test_db_connection():
     except Exception as e:
         return jsonify({"error": f"Database connection failed: {e}"}), 500
 
-if _name_ == '_main_':
+if __name__ == '__main__':
     
     test_db_connection_on_startup()
     app.run(debug=True, host='0.0.0.0', port=5000)
