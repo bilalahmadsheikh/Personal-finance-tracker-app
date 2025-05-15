@@ -1,0 +1,121 @@
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'api_service.dart';
+
+class TransactionLogsScreen extends StatefulWidget {
+  final String userId;
+  const TransactionLogsScreen({super.key, required this.userId});
+
+  @override
+  State<TransactionLogsScreen> createState() => _TransactionLogsScreenState();
+}
+
+class _TransactionLogsScreenState extends State<TransactionLogsScreen> {
+  List<dynamic> _logs = [];
+  bool _isLoading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchLogs();
+  }
+
+  Future<void> _fetchLogs() async {
+    try {
+      final logs = await ApiService.getTransactionLogs(widget.userId);
+      setState(() {
+        _logs = logs;
+        _isLoading = false;
+        _error = null;
+      });
+    } catch (e) {
+      setState(() {
+        _error = 'Failed to load logs';
+        _isLoading = false;
+      });
+    }
+  }
+
+  Color _getActionColor(String action) {
+    switch (action.toLowerCase()) {
+      case 'add':
+        return Colors.green;
+      case 'edit':
+        return Colors.orange;
+      case 'delete':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  String _formatTimestamp(dynamic timestamp) {
+    if (timestamp == null) return "Unknown time";
+    try {
+      // Handle if timestamp is already a String or DateTime
+      DateTime parsed;
+      if (timestamp is String) {
+        parsed = DateTime.parse(timestamp);
+      } else if (timestamp is DateTime) {
+        parsed = timestamp;
+      } else {
+        return timestamp.toString();
+      }
+      return DateFormat('yyyy-MM-dd • hh:mm a').format(parsed);
+    } catch (e) {
+      return timestamp.toString();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("Transaction Logs")),
+      body:
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _error != null
+              ? Center(child: Text(_error!))
+              : _logs.isEmpty
+              ? const Center(child: Text("No logs found."))
+              : RefreshIndicator(
+                onRefresh: _fetchLogs,
+                child: ListView.builder(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  itemCount: _logs.length,
+                  itemBuilder: (context, index) {
+                    final log = _logs[index];
+
+                    // Defensive checks for null or missing fields
+                    final action = (log['action'] ?? '').toString();
+                    final category = (log['category'] ?? 'Unknown').toString();
+                    final amount =
+                        log['amount'] != null
+                            ? log['amount'].toString()
+                            : '0.00';
+                    final timestamp = log['timestamp'];
+
+                    return ListTile(
+                      leading: Icon(
+                        Icons.history,
+                        color: _getActionColor(action),
+                      ),
+                      title: Text(
+                        "${action.toUpperCase()} - $category",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: _getActionColor(action),
+                        ),
+                      ),
+                      subtitle: Text(
+                        "Amount: Rs$amount\nTime: ${_formatTimestamp(timestamp)}",
+                      ),
+                      isThreeLine: true,
+                    );
+                  },
+                ),
+              ),
+    );
+  }
+}
