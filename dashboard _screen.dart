@@ -3,6 +3,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import 'api_service.dart';
 import 'main.dart'; // For LoginScreen navigation
+import 'transaction_logs_screen.dart'; // For logs screen
 
 class DashboardScreen extends StatelessWidget {
   final String userId;
@@ -33,10 +34,7 @@ class DashboardScreen extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => _logout(context),
-            child: const Text(
-              "Logout",
-              style: TextStyle(color: Colors.white),
-            ),
+            child: const Text("Logout", style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -56,13 +54,16 @@ class DashboardScreen extends StatelessWidget {
           double totalExpense = (data['totalExpense'] ?? 0).toDouble();
           double netSavings = totalIncome - totalExpense;
 
-          double incomePercentage = totalIncome + totalExpense == 0
-              ? 0
-              : (totalIncome / (totalIncome + totalExpense)) * 100;
+          double incomePercentage =
+              totalIncome + totalExpense == 0
+                  ? 0
+                  : (totalIncome / (totalIncome + totalExpense)) * 100;
           double expensePercentage = 100 - incomePercentage;
 
           List<double> monthlySpending = List<double>.from(
-            (data['monthlySpending'] ?? [0, 0, 0]).map((e) => (e as num).toDouble()),
+            (data['monthlySpending'] ?? [0, 0, 0]).map(
+              (e) => (e as num).toDouble(),
+            ),
           );
 
           return SingleChildScrollView(
@@ -72,7 +73,9 @@ class DashboardScreen extends StatelessWidget {
                 // Summary Card
                 Card(
                   elevation: 4,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                   child: Padding(
                     padding: const EdgeInsets.all(16.0),
                     child: Row(
@@ -87,10 +90,37 @@ class DashboardScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 20),
 
+                // View Logs Button
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder:
+                              (context) =>
+                                  TransactionLogsScreen(userId: userId),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.history),
+                    label: const Text("View Logs"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.deepPurple,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+
                 // Pie Chart
                 const Align(
                   alignment: Alignment.centerLeft,
-                  child: Text("Income vs Expense", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  child: Text(
+                    "Income vs Expense",
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 SizedBox(
@@ -101,16 +131,24 @@ class DashboardScreen extends StatelessWidget {
                         PieChartSectionData(
                           color: Colors.green,
                           value: incomePercentage,
-                          title: "Income\n${incomePercentage.toStringAsFixed(1)}%",
+                          title:
+                              "Income\n${incomePercentage.toStringAsFixed(1)}%",
                           radius: 80,
-                          titleStyle: const TextStyle(color: Colors.white, fontSize: 14),
+                          titleStyle: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                          ),
                         ),
                         PieChartSectionData(
                           color: Colors.red,
                           value: expensePercentage,
-                          title: "Expense\n${expensePercentage.toStringAsFixed(1)}%",
+                          title:
+                              "Expense\n${expensePercentage.toStringAsFixed(1)}%",
                           radius: 80,
-                          titleStyle: const TextStyle(color: Colors.white, fontSize: 14),
+                          titleStyle: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                          ),
                         ),
                       ],
                       sectionsSpace: 2,
@@ -124,7 +162,10 @@ class DashboardScreen extends StatelessWidget {
                 // Bar Chart
                 const Align(
                   alignment: Alignment.centerLeft,
-                  child: Text("Monthly Spending", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  child: Text(
+                    "Monthly Spending",
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 SizedBox(
@@ -134,7 +175,10 @@ class DashboardScreen extends StatelessWidget {
                       borderData: FlBorderData(show: false),
                       titlesData: FlTitlesData(
                         leftTitles: AxisTitles(
-                          sideTitles: SideTitles(showTitles: true, reservedSize: 40),
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 40,
+                          ),
                         ),
                         bottomTitles: AxisTitles(
                           sideTitles: SideTitles(
@@ -142,7 +186,10 @@ class DashboardScreen extends StatelessWidget {
                             getTitlesWidget: (value, _) {
                               int index = value.toInt();
                               if (index >= 0 && index < monthLabels.length) {
-                                return Text(monthLabels[index], style: const TextStyle(fontSize: 12));
+                                return Text(
+                                  monthLabels[index],
+                                  style: const TextStyle(fontSize: 12),
+                                );
                               }
                               return const Text('');
                             },
@@ -161,7 +208,7 @@ class DashboardScreen extends StatelessWidget {
                               color: Colors.blue,
                               width: 20,
                               borderRadius: BorderRadius.circular(4),
-                            )
+                            ),
                           ],
                         ),
                       ),
@@ -179,7 +226,14 @@ class DashboardScreen extends StatelessWidget {
   Widget _buildSummaryItem(String title, double amount, Color color) {
     return Column(
       children: [
-        Text(title, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: color)),
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: color,
+          ),
+        ),
         const SizedBox(height: 8),
         Text(
           '₨${amount.toStringAsFixed(2)}',
