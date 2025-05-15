@@ -3,7 +3,8 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 class ApiService {
-  static const String baseUrl = "http://192.168.14.183:5000";
+  static const String baseUrl =
+      "http://10.1.173.45:5000"; // Your Flask server URL
 
   // User registration
   static Future<Map<String, dynamic>> registerUser(
@@ -79,6 +80,55 @@ class ApiService {
     }
   }
 
+  // Delete transaction (moves to backup table)
+  static Future<Map<String, dynamic>> deleteTransaction(
+    int transactionId,
+  ) async {
+    try {
+      final response = await http.post(
+        Uri.parse("$baseUrl/delete-transaction"),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({"transaction_id": transactionId}),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {"message": "Failed to delete transaction: $e"};
+    }
+  }
+
+  // Restore transaction from backup table
+  static Future<Map<String, dynamic>> restoreTransaction(int backupId) async {
+    try {
+      final response = await http.post(
+        Uri.parse("$baseUrl/restore-transaction"),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({"backup_id": backupId}),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {"message": "Failed to restore transaction: $e"};
+    }
+  }
+
+  // Get deleted transactions
+  static Future<List<Map<String, dynamic>>> getDeletedTransactions(
+    String userId,
+  ) async {
+    try {
+      final response = await http.get(
+        Uri.parse("$baseUrl/get-deleted-transactions/$userId"),
+        headers: {"Content-Type": "application/json"},
+      );
+      if (response.statusCode == 200) {
+        return List<Map<String, dynamic>>.from(jsonDecode(response.body));
+      } else {
+        return [];
+      }
+    } catch (e) {
+      return [];
+    }
+  }
+
   // Get transactions
   static Future<List<Map<String, dynamic>>> getTransactions(
     String userId,
@@ -95,6 +145,38 @@ class ApiService {
       }
     } catch (e) {
       return [];
+    }
+  }
+
+  // Update transaction
+  static Future<Map<String, dynamic>> updateTransaction(
+    String userId,
+    int transactionId,
+    String category,
+    double amount,
+    String type,
+    String description,
+  ) async {
+    try {
+      final response = await http.post(
+        Uri.parse("$baseUrl/update-transaction"),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          "transaction_id": transactionId,
+          "user_id": userId,
+          "category": category,
+          "amount": amount,
+          "transaction_type": type,
+          "description": description,
+        }),
+      );
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        return {"message": "Error: ${response.statusCode} ${response.body}"};
+      }
+    } catch (e) {
+      return {"message": "Failed to connect to server: $e"};
     }
   }
 
@@ -154,7 +236,7 @@ class ApiService {
     }
   }
 
-  // Get reports data (can add time filters as needed)
+  // Get reports data
   static Future<Map<String, dynamic>> getReport(
     String userId,
     String period,
@@ -268,6 +350,25 @@ class ApiService {
     try {
       final response = await http.get(
         Uri.parse("$baseUrl/get-transactions-date/$userId?date=$date"),
+        headers: {"Content-Type": "application/json"},
+      );
+      if (response.statusCode == 200) {
+        return List<Map<String, dynamic>>.from(jsonDecode(response.body));
+      } else {
+        return [];
+      }
+    } catch (e) {
+      return [];
+    }
+  }
+
+  // New: Get transaction logs
+  static Future<List<Map<String, dynamic>>> getTransactionLogs(
+    String userId,
+  ) async {
+    try {
+      final response = await http.get(
+        Uri.parse("$baseUrl/get-transaction-logs/$userId"),
         headers: {"Content-Type": "application/json"},
       );
       if (response.statusCode == 200) {
