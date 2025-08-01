@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 
 class ApiService {
   static const String baseUrl =
-      "http://10.1.173.45:5000"; // Your Flask server URL
+       // Your Flask server URL
 
   // User registration
   static Future<Map<String, dynamic>> registerUser(
